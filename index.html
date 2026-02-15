@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flappy Pixel</title>
+    <style>
+        body {
+            margin: 0; display: flex; justify-content: center; align-items: center;
+            height: 100vh; background-color: #1a252c; color: white;
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+            overflow: hidden; /* Prevents scrolling on mobile */
+        }
+        canvas {
+            border: 4px solid #2c3e50; border-radius: 8px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.8); background-color: #A0E7E8;
+            image-rendering: pixelated;
+            max-width: 100%; /* Shrinks to fit mobile screens */
+            max-height: 100vh;
+            touch-action: none; /* Stops browser zoom/pan on tap */
+        }
+        #gameContainer { text-align: center; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        p { margin-top: 15px; font-size: 1rem; color: #7f8c8d; }
+        @media (max-width: 500px) { p { display: none; } } /* Hide instructions on small phones */
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="400" height="500"></canvas>
+        <p>Press SPACE or TAP to play</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // --- GAME STATES & SAVES ---
+        let state = 'START';
+        let frames = 0; let score = 0;
+
+        let highScore = parseInt(localStorage.getItem("flappyMaxScore")) || 0;
+        let totalCoins = parseInt(localStorage.getItem("flappyBankedCoins")) || 0;
+        let unlockedSkins = JSON.parse(localStorage.getItem("flappyUnlockedSkins")) || [0];
+        let equippedSkin = parseInt(localStorage.getItem("flappyEquippedSkin")) || 0;
+
+        const pipeSpeed = 3.5; const pipeGap = 125; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
+        let shakeFrames = 0; let flashFrames = 0; let particles = [];
+        let mountX = 0; let cityX = 0; let forestX = 0;
+
+        // --- 8-BIT AUDIO ---
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        const sfx = {
+            playTone: function(freq, type, duration, vol, sweep = 0) {
+                if (!audioCtx) return;
+                const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+                osc.type = type; osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                if (sweep !== 0) osc.frequency.exponentialRampToValueAtTime(freq + sweep, audioCtx.currentTime + duration);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                osc.start(); osc.stop(audioCtx.currentTime + duration);
+            },
+            flap: () => sfx.playTone(300, 'triangle', 0.15, 0.5, 200),
+            score: () => { sfx.playTone(800, 'square', 0.1, 0.3); setTimeout(() => sfx.playTone(1200, 'square', 0.15, 0.3), 100); },
+            coin: () => sfx.playTone(1200, 'square', 0.1, 0.2, 800),
+            crash: () => { sfx.playTone(150, 'sawtooth', 0.3, 0.5, -100); setTimeout(() => sfx.playTone(50, 'square', 0.4, 0.5, -40), 100); },
+            buy: () => { sfx.playTone(600, 'sine', 0.1, 0.3, 400); setTimeout(() => sfx.playTone(1000, 'sine', 0.2, 0.3, 600), 100); }
+        };
+
+        // --- SHOP & PIXEL SKINS ---
+        const colors = { '#': '#000000', 'Y': '#F1C40F', 'W': '#FFFFFF', 'O': '#E67E22', 'B': '#3498DB', 'R': '#E74C3C', 'r': '#922B21', 'G': '#ECF0F1', 'P': '#F5B7B1', 'p': '#8E44AD' };
+        const skins = [
+            { id: 0, name: "OG BIRD", price: 0, up: ["     ######   ", "   ##YYYYWW#  ", "  #YYYYYYW#W# ", " #YYYYYYYYWW# ", " #YY####YYY###", "####WWWW#YOOO#", "#Y##WWWW#Y####", " #YY####YYOOO#", "  ##YYYYYY##  ", "    ######    "], down: ["     ######   ", "   ##YYYYWW#  ", "  #YYYYYYW#W# ", " #YYYYYYYYWW# ", " #YYYYYYYYY###", "##YY####YYOOO#", "#YY#WWWW#Y####", " #Y#WWWW#YOOO#", "  ######YY##  ", "    ######    "] },
+            { id: 1, name: "BLUE JAY", price: 10, up: ["     ######   ", "   ##BBBBWW#  ", "  #BBBBBBW#W# ", " #BBBBBBBBWW# ", " #BB####BBB###", "####WWWW#BOOO#", "#B##WWWW#B####", " #BB####BBOOO#", "  ##BBBBBB##  ", "    ######    "], down: ["     ######   ", "   ##BBBBWW#  ", "  #BBBBBBW#W# ", " #BBBBBBBBWW# ", " #BBBBBBBBB###", "##BB####BBOOO#", "#BB#WWWW#B####", " #B#WWWW#BOOO#", "  ######BB##  ", "    ######    "] },
+            { id: 2, name: "VAMP BAT", price: 25, up: ["#            #", "##  #    #  ##", "#p# ###### #p#", "#pp##R  R##pp#", " #p########p# ", "  #p##WW##p#  ", "  # ##  ## #  ", "              ", "              ", "              "], down: ["              ", "    #    #    ", "    ######    ", "  ###R  R###  ", " #p########p# ", "#pp###WW###pp#", "##p#  ##  #p##", " # #      # # ", "              ", "              "] },
+            { id: 3, name: "SPOOK GHOST", price: 50, up: ["  ########    ", " #GGGGGGGG#   ", "#GGGGGGGGGG#  ", "#GG#GGGG#GG#  ", "#GGGGGGGGGG#  ", "#GPGGGGGGPG#  ", "#GGGGGGGGGG#  ", "#GGGGGGGGGG#  ", " #GG##GG##G#  ", "  ##  ##  ##  "], down: ["  ########    ", " #GGGGGGGG#   ", "#GGGGGGGGGG#  ", "#GG#GGGG#GG#  ", "#GGGGGGGGGG#  ", "#GPGGGGGGPG#  ", "#GGGGGGGGGG#  ", " #GGGGGGGG#   ", "  #G##G##G#   ", "   #  #  #    "] }
+        ];
+
+        // --- LEVEL ASSETS & THEMES ---
+        const coinArt = ["  ####  ", " #YYYY# ", " #YWWY# ", " #YWWY# ", " #YWWY# ", " #YWWY# ", " #YYYY# ", "  ####  "];
+        const cloudFrame = ["      WWWW      ", "    WWWWWWWW    ", "  WWWWWWWWWWWW  ", " WWWWWWWWWWWWWW ", "WWWWWWWWWWWWWWWW"];
+        const clouds = [{ x: 50, y: 50, scale: 3, speed: 0.3 }, { x: 250, y: 120, scale: 2, speed: 0.5 }, { x: 450, y: 70, scale: 4, speed: 0.2 }];
+
+        const skyThemes = [
+            { top: "#A0E7E8", bot: "#A0E7E8", mount: "#7FB3D5", city: "#5499C7", forest: "#229954", trunk: "#873600", win: false },
+            { top: "#E67E22", bot: "#F1C40F", mount: "#D35400", city: "#A04000", forest: "#6E2C00", trunk: "#421A00", win: true },
+            { top: "#1A252C", bot: "#34495E", mount: "#17202A", city: "#212F3C", forest: "#1B2631", trunk: "#11181D", win: true }
+        ];
+        const pipeColors = [{ light: "#9ADD55", mid: "#74BF2E", dark: "#467A18", out: "#000" }, { light: "#F1948A", mid: "#E74C3C", dark: "#922B21", out: "#000" }, { light: "#F8C471", mid: "#F39C12", dark: "#B9770E", out: "#000" }, { light: "#D2B4DE", mid: "#9B59B6", dark: "#5B2C6F", out: "#000" }, { light: "#85C1E9", mid: "#3498DB", dark: "#21618C", out: "#000" }, { light: "#D5D8DC", mid: "#95A5A6", dark: "#566573", out: "#000" }, { light: "#F9E79F", mid: "#F1C40F", dark: "#9A7D0A", out: "#000" }];
+
+        const bgMount = [{x: 0, h: 180}, {x: 160, h: 220}, {x: 310, h: 160}]; const wMount = 460;
+        const bgCity = [{x: 0, w: 50, h: 120}, {x: 60, w: 40, h: 160}, {x: 110, w: 70, h: 100}, {x: 190, w: 40, h: 140}, {x: 240, w: 60, h: 90}]; const wCity = 320;
+        const bgForest = [{x: 0, h: 60}, {x: 40, h: 80}, {x: 90, h: 50}, {x: 130, h: 70}, {x: 170, h: 90}, {x: 210, h: 60}]; const wForest = 260;
+
+        // --- THE BIRD ---
+        const bird = {
+            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.45, jump: -7.5, flapTimer: 0,
+            draw: function(isMenu = false) {
+                let activeSkin = skins.find(s => s.id === equippedSkin) || skins[0];
+                let frame = this.flapTimer > 0 ? activeSkin.down : activeSkin.up;
+                ctx.save(); ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
+                if(!isMenu) ctx.rotate(Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (this.vy * 0.1))));
+                for (let r = 0; r < frame.length; r++) {
+                    for (let c = 0; c < frame[r].length; c++) {
+                        if (frame[r][c] !== ' ') { ctx.fillStyle = colors[frame[r][c]]; ctx.fillRect((c * this.scale) - (this.w / 2), (r * this.scale) - (this.h / 2), this.scale, this.scale); }
+                    }
+                }
+                ctx.restore();
+            },
+            update: function() {
+                this.vy += this.gravity; this.y += this.vy;
+                if (this.flapTimer > 0) this.flapTimer--;
+                if (this.y + this.h >= canvas.height - groundHeight) { this.y = canvas.height - groundHeight - this.h; triggerGameOver(); }
+                if (this.y <= 0) { this.y = 0; this.vy = 0; }
+            },
+            flap: function() { this.vy = this.jump; this.flapTimer = 12; sfx.flap(); }
+        };
+
+        // --- GAMEPLAY MECHANICS ---
+        const pipes = []; const coins = [];
+        function checkHighScore() { if (score > highScore) { highScore = score; localStorage.setItem("flappyMaxScore", highScore); } }
+
+        function drawPixelPipe(x, y, w, h, isTop, theme) {
+            ctx.fillStyle = theme.out; ctx.fillRect(x, y, w, h); ctx.fillStyle = theme.mid; ctx.fillRect(x + 4, y, w - 8, h);
+            ctx.fillStyle = theme.light; ctx.fillRect(x + 4, y, 8, h); ctx.fillStyle = theme.dark; ctx.fillRect(x + w - 16, y, 8, h); ctx.fillStyle = theme.light; ctx.fillRect(x + 16, y, 4, h);
+            let capY = isTop ? y + h - 24 : y; let capW = w + 12; let capX = x - 6;
+            ctx.fillStyle = theme.out; ctx.fillRect(capX, capY, capW, 24); ctx.fillStyle = theme.mid; ctx.fillRect(capX + 4, capY + 4, capW - 8, 16);
+            ctx.fillStyle = theme.light; ctx.fillRect(capX + 4, capY + 4, capW - 8, 4); ctx.fillStyle = theme.dark; ctx.fillRect(capX + 4, capY + 16, capW - 8, 4);
+        }
+
+        function handleLevelObjects() {
+            let activePipe = pipeColors[Math.min(Math.floor(score / 10), pipeColors.length - 1)];
+            for (let i = 0; i < pipes.length; i++) {
+                let p = pipes[i];
+                drawPixelPipe(p.x, 0, pipeWidth, p.top, true, activePipe); drawPixelPipe(p.x, p.top + pipeGap, pipeWidth, canvas.height - (p.top + pipeGap) - groundHeight, false, activePipe);
+                if (state === 'PLAY') p.x -= pipeSpeed;
+                if (state === 'PLAY' && bird.x < p.x + pipeWidth && bird.x + bird.w > p.x && (bird.y < p.top || bird.y + bird.h > p.top + pipeGap)) triggerGameOver();
+                if (p.x === Math.floor(bird.x)) { score++; sfx.score(); checkHighScore(); }
+                if (p.x + pipeWidth < -20) { pipes.shift(); i--; }
+            }
+
+            for (let i = 0; i < coins.length; i++) {
+                let c = coins[i];
+                if (!c.collected) {
+                    let spin = Math.max(0.1, Math.abs(Math.cos(frames * 0.05)));
+                    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(spin, 1);
+                    for (let r = 0; r < coinArt.length; r++) {
+                        for (let col = 0; col < coinArt[r].length; col++) {
+                            if (coinArt[r][col] !== ' ') { ctx.fillStyle = colors[coinArt[r][col]]; ctx.fillRect((col * 3) - 12, (r * 3) - 12, 3, 3); }
+                        }
+                    }
+                    ctx.restore();
+                    if (state === 'PLAY') c.x -= pipeSpeed;
+                    if (state === 'PLAY' && Math.hypot(c.x - (bird.x + bird.w/2), c.y - (bird.y + bird.h/2)) < 25) {
+                        c.collected = true; totalCoins++; localStorage.setItem("flappyBankedCoins", totalCoins); sfx.coin();
+                    }
+                }
+                if (c.x < -30) { coins.shift(); i--; }
+            }
+
+            if (state === 'PLAY' && frames % 80 === 0) {
+                let min = 50; let max = canvas.height - groundHeight - pipeGap - min; let topH = Math.floor(Math.random() * (max - min + 1)) + min;
+                pipes.push({ x: canvas.width, top: topH });
+                if (Math.random() > 0.4) coins.push({ x: canvas.width + pipeWidth/2, y: topH + pipeGap/2, collected: false });
+            }
+        }
+
+        // --- PARTICLES ---
+        function spawnParticles() {
+            let ac = '#F1C40F'; if(equippedSkin === 1) ac = '#3498DB'; if(equippedSkin === 2) ac = '#8E44AD'; if(equippedSkin === 3) ac = '#ECF0F1';
+            for(let i=0; i<20; i++) particles.push({ x: bird.x+bird.w/2, y: bird.y+bird.h/2, vx: (Math.random()-0.5)*10, vy: (Math.random()-1)*10, color: Math.random()>0.5?ac:'#FFFFFF', size: Math.random()*6+2 });
+        }
+        function drawParticles() { for(let p of particles) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); p.x+=p.vx; p.y+=p.vy; p.vy+=0.5; } }
+
+        // --- PARALLAX RENDERER ---
+        function drawParallaxLayer(objects, totalWidth, scrollX, drawFunc, activeTheme) {
+            let offset = scrollX % totalWidth;
+            for (let i = -1; i <= Math.ceil(canvas.width / totalWidth) + 1; i++) {
+                let startX = (i * totalWidth) - offset;
+                for (let obj of objects) drawFunc(startX + obj.x, obj, activeTheme);
+            }
+        }
+
+        function renderMountain(x, obj, theme) { ctx.fillStyle = theme.mount; ctx.fillRect(x + 40, canvas.height - groundHeight - obj.h, 40, obj.h); ctx.fillRect(x + 20, canvas.height - groundHeight - obj.h + 30, 80, obj.h - 30); ctx.fillRect(x, canvas.height - groundHeight - obj.h + 70, 120, obj.h - 70); }
+        function renderCity(x, obj, theme) {
+            ctx.fillStyle = theme.city; ctx.fillRect(x, canvas.height - groundHeight - obj.h, obj.w, obj.h);
+            if (theme.win) { ctx.fillStyle = "#F1C40F"; for (let wy = canvas.height - groundHeight - obj.h + 15; wy < canvas.height - groundHeight - 10; wy += 20) { for (let wx = 10; wx < obj.w - 10; wx += 15) { if (((x + wx) * wy) % 7 > 2) ctx.fillRect(x + wx, wy, 6, 6); } } }
+        }
+        function renderForest(x, obj, theme) { ctx.fillStyle = theme.trunk; ctx.fillRect(x + 10, canvas.height - groundHeight - 20, 10, 20); ctx.fillStyle = theme.forest; ctx.fillRect(x, canvas.height - groundHeight - obj.h, 30, obj.h - 20); ctx.fillRect(x - 10, canvas.height - groundHeight - obj.h + 10, 50, obj.h - 40); }
+
+        function drawBackground(theme) {
+            let grad = ctx.createLinearGradient(0, 0, 0, canvas.height); grad.addColorStop(0, theme.top); grad.addColorStop(1, theme.bot); ctx.fillStyle = grad; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            for (let c of clouds) {
+                for (let r = 0; r < cloudFrame.length; r++) { for (let col = 0; col < cloudFrame[r].length; col++) { if (cloudFrame[r][col] === 'W') ctx.fillRect(c.x + (col * c.scale), c.y + (r * c.scale), c.scale, c.scale); } }
+                if (state === 'PLAY') { c.x -= c.speed; if (c.x + (16 * c.scale) < 0) { c.x = canvas.width; c.y = Math.random() * 150 + 20; } }
+            }
+            drawParallaxLayer(bgMount, wMount, mountX, renderMountain, theme); drawParallaxLayer(bgCity, wCity, cityX, renderCity, theme); drawParallaxLayer(bgForest, wForest, forestX, renderForest, theme);
+        }
+
+        function drawGround() {
+            ctx.fillStyle = "#DED895"; ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight); ctx.fillStyle = "#C8B788";
+            for(let i = 0; i < canvas.width + 40; i += 30) { ctx.beginPath(); ctx.moveTo(i + groundX, canvas.height - groundHeight); ctx.lineTo(i + 20 + groundX, canvas.height); ctx.lineTo(i + 10 + groundX, canvas.height); ctx.lineTo(i - 10 + groundX, canvas.height - groundHeight); ctx.fill(); }
+            if (state === 'PLAY') { groundX -= pipeSpeed; if(groundX <= -30) groundX = 0; }
+            ctx.fillStyle = "#73BF2E"; ctx.fillRect(0, canvas.height - groundHeight, canvas.width, 10); ctx.fillStyle = "#4D801E"; ctx.fillRect(0, canvas.height - groundHeight + 10, canvas.width, 4);
+        }
+
+        // --- SHOP UI ---
+        function drawShop() {
+            ctx.fillStyle = "#2C3E50"; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.textAlign = "center"; ctx.lineWidth = 4; ctx.strokeStyle = "black";
+            ctx.fillStyle = "white"; ctx.font = "bold 35px 'Courier New'"; ctx.strokeText("SKIN SHOP", canvas.width/2, 50); ctx.fillText("SKIN SHOP", canvas.width/2, 50);
+            ctx.fillStyle = "#F1C40F"; ctx.font = "bold 20px 'Courier New'"; ctx.strokeText("BANK: " + totalCoins + " COINS", canvas.width/2, 85); ctx.fillText("BANK: " + totalCoins + " COINS", canvas.width/2, 85);
+
+            for (let i = 0; i < skins.length; i++) {
+                let s = skins[i]; let isUnlocked = unlockedSkins.includes(s.id); let isEquipped = equippedSkin === s.id; let boxY = 110 + (i * 75);
+                ctx.fillStyle = isEquipped ? "#27AE60" : (isUnlocked ? "#7F8C8D" : "#8E44AD"); ctx.fillRect(30, boxY, 340, 65); ctx.strokeRect(30, boxY, 340, 65);
+                ctx.save(); ctx.translate(50, boxY + 18);
+                for (let r = 0; r < s.up.length; r++) { for (let c = 0; c < s.up[r].length; c++) { if (s.up[r][c] !== ' ') { ctx.fillStyle = colors[s.up[r][c]]; ctx.fillRect(c * 2, r * 2, 2, 2); } } } ctx.restore();
+                ctx.textAlign = "left"; ctx.fillStyle = "white"; ctx.font = "bold 20px 'Courier New'"; ctx.strokeText(s.name, 95, boxY + 38); ctx.fillText(s.name, 95, boxY + 38);
+                ctx.textAlign = "right"; ctx.font = "bold 18px 'Courier New'";
+                let statusText = isEquipped ? "EQUIPPED" : (isUnlocked ? "CLICK: EQUIP" : "PRICE: " + s.price);
+                if (!isUnlocked && totalCoins < s.price) ctx.fillStyle = "#E74C3C";
+                ctx.strokeText(statusText, 350, boxY + 38); ctx.fillText(statusText, 350, boxY + 38);
+            }
+            ctx.fillStyle = "#E74C3C"; ctx.fillRect(140, 430, 120, 40); ctx.strokeRect(140, 430, 120, 40);
+            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 20px 'Courier New'"; ctx.strokeText("BACK", canvas.width/2, 458); ctx.fillText("BACK", canvas.width/2, 458);
+        }
+
+        // --- UNIFIED INPUT HANDLER (MOBILE + DESKTOP) ---
+        function triggerGameOver() { state = 'GAMEOVER'; shakeFrames = 15; flashFrames = 3; sfx.crash(); spawnParticles(); }
+        function resetGame() { bird.y = 150; bird.vy = 0; bird.flapTimer = 0; pipes.length = 0; coins.length = 0; score = 0; frames = 0; particles = []; state = 'PLAY'; bird.flap(); }
+
+        function handleInput(e) {
+            // Ignore keys other than Spacebar
+            if (e && e.type === "keydown" && e.code !== "Space") return;
+            if (e && e.cancelable) e.preventDefault(); // Stop mobile zooming/double-firing
+            initAudio();
+
+            let x = 0, y = 0;
+            // Map coordinates for mouse clicks or finger taps
+            if (e && (e.type === "mousedown" || e.type === "touchstart")) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                let clientX = e.clientX; let clientY = e.clientY;
+
+                if (e.type === "touchstart") { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+                x = (clientX - rect.left) * scaleX; y = (clientY - rect.top) * scaleY;
+            }
+
+            if (state === 'START') {
+                if (e && e.type === "keydown") resetGame();
+                else if (x > 120 && x < 280 && y > 240 && y < 290) resetGame();
+                else if (x > 120 && x < 280 && y > 310 && y < 360) state = 'SHOP';
+            }
+            else if (state === 'PLAY') bird.flap();
+            else if (state === 'GAMEOVER') state = 'START';
+            else if (state === 'SHOP') {
+                if (e && e.type === "keydown") { state = 'START'; return; } // Space exits shop
+                if (x > 140 && x < 260 && y > 430 && y < 470) { state = 'START'; sfx.flap(); return; }
+                for (let i = 0; i < skins.length; i++) {
+                    let boxY = 110 + (i * 75);
+                    if (x > 30 && x < 370 && y > boxY && y < boxY + 65) {
+                        if (unlockedSkins.includes(skins[i].id)) { equippedSkin = skins[i].id; localStorage.setItem("flappyEquippedSkin", equippedSkin); sfx.flap(); }
+                        else if (totalCoins >= skins[i].price) {
+                            totalCoins -= skins[i].price; unlockedSkins.push(skins[i].id); equippedSkin = skins[i].id;
+                            localStorage.setItem("flappyBankedCoins", totalCoins); localStorage.setItem("flappyUnlockedSkins", JSON.stringify(unlockedSkins)); localStorage.setItem("flappyEquippedSkin", equippedSkin); sfx.buy();
+                        } else { sfx.crash(); }
+                    }
+                }
+            }
+        }
+
+        // Add the unified listeners
+        canvas.addEventListener("mousedown", handleInput);
+        canvas.addEventListener("touchstart", handleInput, { passive: false });
+        document.addEventListener("keydown", handleInput);
+
+        // --- RENDER UI ---
+        function drawUI() {
+            if (state === 'SHOP') return;
+            ctx.textAlign = "center"; ctx.lineWidth = 4; ctx.strokeStyle = "black";
+
+            if (state === 'START') {
+                ctx.fillStyle = "white"; ctx.font = "bold 40px 'Courier New'"; ctx.strokeText("FLAPPY PIXEL", canvas.width/2, 110); ctx.fillText("FLAPPY PIXEL", canvas.width/2, 110);
+                ctx.fillStyle = "#27AE60"; ctx.fillRect(120, 240, 160, 50); ctx.strokeRect(120, 240, 160, 50); ctx.fillStyle = "white"; ctx.font = "bold 25px 'Courier New'"; ctx.strokeText("PLAY", canvas.width/2, 275); ctx.fillText("PLAY", canvas.width/2, 275);
+                ctx.fillStyle = "#8E44AD"; ctx.fillRect(120, 310, 160, 50); ctx.strokeRect(120, 310, 160, 50); ctx.fillStyle = "white"; ctx.strokeText("SHOP", canvas.width/2, 345); ctx.fillText("SHOP", canvas.width/2, 345);
+            }
+            else if (state === 'PLAY') {
+                ctx.fillStyle = "white"; ctx.font = "bold 50px 'Courier New'"; ctx.strokeText(score, canvas.width/2, 70); ctx.fillText(score, canvas.width/2, 70);
+                ctx.textAlign = "right"; ctx.font = "bold 25px 'Courier New'"; ctx.fillStyle = "#F1C40F"; ctx.strokeText(totalCoins, canvas.width - 15, 35); ctx.fillText(totalCoins, canvas.width - 15, 35);
+                ctx.fillStyle = "white"; ctx.fillRect(canvas.width - (totalCoins.toString().length * 15) - 30, 20, 10, 10); ctx.fillStyle = "#F1C40F"; ctx.fillRect(canvas.width - (totalCoins.toString().length * 15) - 28, 22, 6, 6);
+            }
+            else if (state === 'GAMEOVER') {
+                ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle = "#DED895"; ctx.fillRect(50, 140, 300, 210); ctx.strokeStyle = "black"; ctx.strokeRect(50, 140, 300, 210);
+                ctx.fillStyle = "white"; ctx.font = "bold 40px 'Courier New'"; ctx.strokeText("GAME OVER", canvas.width/2, 110); ctx.fillText("GAME OVER", canvas.width/2, 110);
+                ctx.fillStyle = "black"; ctx.font = "bold 20px 'Courier New'"; ctx.fillText("SCORE", 250, 175); ctx.fillText("BEST", 250, 240);
+                ctx.fillStyle = "white"; ctx.font = "bold 30px 'Courier New'"; ctx.strokeText(score, 250, 205); ctx.fillText(score, 250, 205); ctx.strokeText(highScore, 250, 270); ctx.fillText(highScore, 250, 270);
+                ctx.fillStyle = "black"; ctx.font = "bold 20px 'Courier New'"; ctx.fillText("MEDAL", 120, 175);
+
+                let medalColor = "#A6ACAF";
+                if (score >= 40) medalColor = "#E5E4E2"; else if (score >= 30) medalColor = "#F1C40F"; else if (score >= 20) medalColor = "#D7DBDD"; else if (score >= 10) medalColor = "#CD7F32";
+                ctx.fillStyle = medalColor; ctx.beginPath(); ctx.arc(120, 230, 35, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.arc(120, 230, 25, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#F1C40F"; ctx.font = "bold 25px 'Courier New'"; ctx.strokeText("BANK: " + totalCoins, canvas.width/2, 330); ctx.fillText("BANK: " + totalCoins, canvas.width/2, 330);
+                ctx.fillStyle = "white"; ctx.font = "20px 'Courier New'"; ctx.strokeText("Tap to Retry", canvas.width/2, 400); ctx.fillText("Tap to Retry", canvas.width/2, 400);
+            }
+        }
+
+        // --- MAIN GAME LOOP ---
+        function gameLoop() {
+            if (state === 'SHOP') { drawShop(); requestAnimationFrame(gameLoop); return; }
+
+            let skyIndex = Math.min(Math.floor(score / 20), skyThemes.length - 1);
+            ctx.save(); if (shakeFrames > 0) { ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10); shakeFrames--; }
+
+            if (state === 'PLAY') { mountX += pipeSpeed * 0.1; cityX += pipeSpeed * 0.3; forestX += pipeSpeed * 0.6; }
+
+            drawBackground(skyThemes[skyIndex]);
+
+            if (state === 'PLAY' || state === 'GAMEOVER') {
+                if (state === 'PLAY') bird.update();
+                handleLevelObjects(); drawGround(); drawParticles(); bird.draw(false);
+            } else { drawGround(); bird.y = 150 + Math.sin(frames * 0.1) * 10; bird.draw(true); }
+
+            drawUI();
+            if (flashFrames > 0) { ctx.fillStyle = "white"; ctx.fillRect(0,0,canvas.width,canvas.height); flashFrames--; }
+            ctx.restore();
+
+            if (state === 'PLAY' || state === 'START') frames++;
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+    </script>
+</body>
+</html>
