@@ -44,7 +44,7 @@
         let unlockedSkins = JSON.parse(localStorage.getItem("flappyUnlockedSkins")) || [0];
         let equippedSkin = parseInt(localStorage.getItem("flappyEquippedSkin")) || 0;
 
-        const pipeSpeed = 3.5; const pipeGap = 125; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
+        const pipeSpeed = 2.8; const pipeGap = 140; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
         let shakeFrames = 0; let flashFrames = 0; let particles = [];
         let mountX = 0; let cityX = 0; let forestX = 0;
 
@@ -99,7 +99,7 @@
 
         // --- THE BIRD ---
         const bird = {
-            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.45, jump: -7.5, flapTimer: 0,
+            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.35, jump: -7, flapTimer: 0,
             draw: function(isMenu = false) {
                 let activeSkin = skins.find(s => s.id === equippedSkin) || skins[0];
                 let frame = this.flapTimer > 0 ? activeSkin.down : activeSkin.up;
