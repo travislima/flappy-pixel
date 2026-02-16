@@ -44,7 +44,7 @@
         let unlockedSkins = JSON.parse(localStorage.getItem("flappyUnlockedSkins")) || [0];
         let equippedSkin = parseInt(localStorage.getItem("flappyEquippedSkin")) || 0;
 
-        const pipeSpeed = 2.0; const pipeGap = 170; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
+        const pipeSpeed = 1.5; const pipeGap = 200; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
         let shakeFrames = 0; let flashFrames = 0; let particles = [];
         let mountX = 0; let cityX = 0; let forestX = 0;
 
@@ -99,7 +99,7 @@
 
         // --- THE BIRD ---
         const bird = {
-            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.25, jump: -6, flapTimer: 0,
+            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.18, jump: -5, flapTimer: 0,
             draw: function(isMenu = false) {
                 let activeSkin = skins.find(s => s.id === equippedSkin) || skins[0];
                 let frame = this.flapTimer > 0 ? activeSkin.down : activeSkin.up;
@@ -163,7 +163,7 @@
                 if (c.x < -30) { coins.shift(); i--; }
             }
 
-            if (state === 'PLAY' && frames % 100 === 0) {
+            if (state === 'PLAY' && frames % 130 === 0) {
                 let min = 50; let max = canvas.height - groundHeight - pipeGap - min; let topH = Math.floor(Math.random() * (max - min + 1)) + min;
                 pipes.push({ x: canvas.width, top: topH });
                 if (Math.random() > 0.4) coins.push({ x: canvas.width + pipeWidth/2, y: topH + pipeGap/2, collected: false });
