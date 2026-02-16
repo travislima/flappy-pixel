@@ -66,9 +66,10 @@
 
         function fetchLeaderboard() {
             leaderboardLoading = true;
-            get(ref(db, "scores")).then(snapshot => {
+            let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
+            Promise.race([get(ref(db, "scores")), timeout]).then(snapshot => {
                 leaderboardData = [];
-                snapshot.forEach(child => { leaderboardData.push(child.val()); });
+                snapshot.forEach(child => { let v = child.val(); if (v && typeof v.name === 'string' && typeof v.score === 'number') leaderboardData.push(v); });
                 leaderboardData.sort((a, b) => b.score - a.score);
                 let seen = {};
                 leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
@@ -78,7 +79,7 @@
         }
 
         function sanitizeName(name) {
-            return name.replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
+            return name.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
         }
 
         function submitScore(name, scoreVal) {

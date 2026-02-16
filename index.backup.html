@@ -3,6 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="A retro pixel-art flappy bird game with skins, coins, and a global leaderboard. Play in your browser!">
+    <meta name="theme-color" content="#1a252c">
+    <meta property="og:title" content="Flappy Pixel">
+    <meta property="og:description" content="A retro pixel-art flappy bird game. How high can you score?">
+    <meta property="og:type" content="website">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Flappy Pixel</title>
     <style>
         body {
@@ -54,15 +61,15 @@
         let leaderboardLoading = false;
         let playerName = localStorage.getItem("flappyPlayerName") || "";
         let nameInputActive = false;
-        let nameInputValue = "";
         let scoreSubmitted = false;
         let scoreSubmitting = false;
 
         function fetchLeaderboard() {
             leaderboardLoading = true;
-            get(ref(db, "scores")).then(snapshot => {
+            let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
+            Promise.race([get(ref(db, "scores")), timeout]).then(snapshot => {
                 leaderboardData = [];
-                snapshot.forEach(child => { leaderboardData.push(child.val()); });
+                snapshot.forEach(child => { let v = child.val(); if (v && typeof v.name === 'string' && typeof v.score === 'number') leaderboardData.push(v); });
                 leaderboardData.sort((a, b) => b.score - a.score);
                 let seen = {};
                 leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
@@ -71,8 +78,15 @@
             }).catch(() => { leaderboardLoading = false; });
         }
 
+        function sanitizeName(name) {
+            return name.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
+        }
+
         function submitScore(name, scoreVal) {
             if (scoreSubmitting) return;
+            name = sanitizeName(name);
+            scoreVal = Math.max(0, Math.min(Math.floor(scoreVal), 9999));
+            if (!name || scoreVal <= 0) return;
             scoreSubmitting = true;
             playerName = name;
             localStorage.setItem("flappyPlayerName", name);
@@ -95,10 +109,12 @@
         let state = 'START';
         let frames = 0; let score = 0;
 
-        let highScore = parseInt(localStorage.getItem("flappyMaxScore")) || 0;
-        let totalCoins = parseInt(localStorage.getItem("flappyBankedCoins")) || 0;
-        let unlockedSkins = JSON.parse(localStorage.getItem("flappyUnlockedSkins")) || [0];
-        let equippedSkin = parseInt(localStorage.getItem("flappyEquippedSkin")) || 0;
+        let highScore = parseInt(localStorage.getItem("flappyMaxScore"), 10) || 0;
+        let totalCoins = parseInt(localStorage.getItem("flappyBankedCoins"), 10) || 0;
+        let unlockedSkins; try { unlockedSkins = JSON.parse(localStorage.getItem("flappyUnlockedSkins")); } catch(e) { unlockedSkins = null; }
+        if (!Array.isArray(unlockedSkins) || !unlockedSkins.includes(0)) unlockedSkins = [0];
+        let equippedSkin = parseInt(localStorage.getItem("flappyEquippedSkin"), 10) || 0;
+        if (!unlockedSkins.includes(equippedSkin)) equippedSkin = 0;
 
         const pipeSpeed = 2.5; const pipeGap = 140; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
         let shakeFrames = 0; let flashFrames = 0; let particles = [];
@@ -137,10 +153,51 @@
             { id: 3, name: "SPOOK GHOST", price: 50, up: ["  ########    ", " #GGGGGGGG#   ", "#GGGGGGGGGG#  ", "#GG#GGGG#GG#  ", "#GGGGGGGGGG#  ", "#GPGGGGGGPG#  ", "#GGGGGGGGGG#  ", "#GGGGGGGGGG#  ", " #GG##GG##G#  ", "  ##  ##  ##  "], down: ["  ########    ", " #GGGGGGGG#   ", "#GGGGGGGGGG#  ", "#GG#GGGG#GG#  ", "#GGGGGGGGGG#  ", "#GPGGGGGGPG#  ", "#GGGGGGGGGG#  ", " #GGGGGGGG#   ", "  #G##G##G#   ", "   #  #  #    "] }
         ];
 
+        // --- PRE-RENDER PIXEL ART TO OFFSCREEN CANVASES ---
+        function renderSpriteToCanvas(frame, scale) {
+            let rows = frame.length, cols = frame[0].length;
+            let offscreen = document.createElement("canvas");
+            offscreen.width = cols * scale; offscreen.height = rows * scale;
+            let octx = offscreen.getContext("2d");
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < frame[r].length; c++) {
+                    if (frame[r][c] !== ' ') { octx.fillStyle = colors[frame[r][c]]; octx.fillRect(c * scale, r * scale, scale, scale); }
+                }
+            }
+            return offscreen;
+        }
+
+        const spriteCache = {};
+        function getSpriteCanvas(frame, scale) {
+            let key = frame.join('|') + ':' + scale;
+            if (!spriteCache[key]) spriteCache[key] = renderSpriteToCanvas(frame, scale);
+            return spriteCache[key];
+        }
+
+        // Pre-render all skin sprites at bird scale
+        for (let s of skins) {
+            getSpriteCanvas(s.up, 3); getSpriteCanvas(s.down, 3);
+            getSpriteCanvas(s.up, 2); getSpriteCanvas(s.down, 2); // shop scale
+        }
+
         // --- LEVEL ASSETS & THEMES ---
         const coinArt = ["  ####  ", " #YYYY# ", " #YWWY# ", " #YWWY# ", " #YWWY# ", " #YWWY# ", " #YYYY# ", "  ####  "];
+        const coinCanvas = renderSpriteToCanvas(coinArt, 3);
         const cloudFrame = ["      WWWW      ", "    WWWWWWWW    ", "  WWWWWWWWWWWW  ", " WWWWWWWWWWWWWW ", "WWWWWWWWWWWWWWWW"];
         const clouds = [{ x: 50, y: 50, scale: 3, speed: 0.3 }, { x: 250, y: 120, scale: 2, speed: 0.5 }, { x: 450, y: 70, scale: 4, speed: 0.2 }];
+        // Pre-render cloud at each scale
+        const cloudCanvases = {};
+        for (let c of clouds) {
+            if (!cloudCanvases[c.scale]) {
+                let rows = cloudFrame.length, cols = cloudFrame[0].length;
+                let offscreen = document.createElement("canvas");
+                offscreen.width = cols * c.scale; offscreen.height = rows * c.scale;
+                let octx = offscreen.getContext("2d");
+                octx.fillStyle = "rgba(255, 255, 255, 0.5)";
+                for (let r = 0; r < rows; r++) { for (let col = 0; col < cols; col++) { if (cloudFrame[r][col] === 'W') octx.fillRect(col * c.scale, r * c.scale, c.scale, c.scale); } }
+                cloudCanvases[c.scale] = offscreen;
+            }
+        }
 
         const skyThemes = [
             { top: "#A0E7E8", bot: "#A0E7E8", mount: "#7FB3D5", city: "#5499C7", forest: "#229954", trunk: "#873600", win: false },
@@ -159,13 +216,10 @@
             draw: function(isMenu = false) {
                 let activeSkin = skins.find(s => s.id === equippedSkin) || skins[0];
                 let frame = this.flapTimer > 0 ? activeSkin.down : activeSkin.up;
+                let sprite = getSpriteCanvas(frame, this.scale);
                 ctx.save(); ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
                 if(!isMenu) ctx.rotate(Math.min(Math.PI / 4, Math.max(-Math.PI / 4, (this.vy * 0.1))));
-                for (let r = 0; r < frame.length; r++) {
-                    for (let c = 0; c < frame[r].length; c++) {
-                        if (frame[r][c] !== ' ') { ctx.fillStyle = colors[frame[r][c]]; ctx.fillRect((c * this.scale) - (this.w / 2), (r * this.scale) - (this.h / 2), this.scale, this.scale); }
-                    }
-                }
+                ctx.drawImage(sprite, -this.w / 2, -this.h / 2);
                 ctx.restore();
             },
             update: function() {
@@ -205,11 +259,7 @@
                 if (!c.collected) {
                     let spin = Math.max(0.1, Math.abs(Math.cos(frames * 0.05)));
                     ctx.save(); ctx.translate(c.x, c.y); ctx.scale(spin, 1);
-                    for (let r = 0; r < coinArt.length; r++) {
-                        for (let col = 0; col < coinArt[r].length; col++) {
-                            if (coinArt[r][col] !== ' ') { ctx.fillStyle = colors[coinArt[r][col]]; ctx.fillRect((col * 3) - 12, (r * 3) - 12, 3, 3); }
-                        }
-                    }
+                    ctx.drawImage(coinCanvas, -12, -12);
                     ctx.restore();
                     if (state === 'PLAY') c.x -= pipeSpeed;
                     if (state === 'PLAY' && Math.hypot(c.x - (bird.x + bird.w/2), c.y - (bird.y + bird.h/2)) < 25) {
@@ -251,9 +301,8 @@
 
         function drawBackground(theme) {
             let grad = ctx.createLinearGradient(0, 0, 0, canvas.height); grad.addColorStop(0, theme.top); grad.addColorStop(1, theme.bot); ctx.fillStyle = grad; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
             for (let c of clouds) {
-                for (let r = 0; r < cloudFrame.length; r++) { for (let col = 0; col < cloudFrame[r].length; col++) { if (cloudFrame[r][col] === 'W') ctx.fillRect(c.x + (col * c.scale), c.y + (r * c.scale), c.scale, c.scale); } }
+                ctx.drawImage(cloudCanvases[c.scale], c.x, c.y);
                 if (state === 'PLAY') { c.x -= c.speed; if (c.x + (16 * c.scale) < 0) { c.x = canvas.width; c.y = Math.random() * 150 + 20; } }
             }
             drawParallaxLayer(bgMount, wMount, mountX, renderMountain, theme); drawParallaxLayer(bgCity, wCity, cityX, renderCity, theme); drawParallaxLayer(bgForest, wForest, forestX, renderForest, theme);
@@ -276,7 +325,7 @@
                 let s = skins[i]; let isUnlocked = unlockedSkins.includes(s.id); let isEquipped = equippedSkin === s.id; let boxY = 110 + (i * 75);
                 ctx.fillStyle = isEquipped ? "#27AE60" : (isUnlocked ? "#7F8C8D" : "#8E44AD"); ctx.fillRect(30, boxY, 340, 65); ctx.strokeRect(30, boxY, 340, 65);
                 ctx.save(); ctx.translate(50, boxY + 18);
-                for (let r = 0; r < s.up.length; r++) { for (let c = 0; c < s.up[r].length; c++) { if (s.up[r][c] !== ' ') { ctx.fillStyle = colors[s.up[r][c]]; ctx.fillRect(c * 2, r * 2, 2, 2); } } } ctx.restore();
+                ctx.drawImage(getSpriteCanvas(s.up, 2), 0, 0); ctx.restore();
                 ctx.textAlign = "left"; ctx.fillStyle = "white"; ctx.font = "bold 20px 'Courier New'"; ctx.strokeText(s.name, 95, boxY + 38); ctx.fillText(s.name, 95, boxY + 38);
                 ctx.textAlign = "right"; ctx.font = "bold 18px 'Courier New'";
                 let statusText = isEquipped ? "EQUIPPED" : (isUnlocked ? "CLICK: EQUIP" : "PRICE: " + s.price);
@@ -292,7 +341,6 @@
 
         function showNamePrompt() {
             nameInputActive = true;
-            nameInputValue = playerName;
             nameInputEl.value = playerName;
             nameInputEl.style.opacity = "1";
             nameInputEl.style.pointerEvents = "auto";
@@ -323,16 +371,15 @@
 
         nameInputEl.addEventListener("keydown", function(e) {
             if (e.key === "Enter") {
-                let name = nameInputEl.value.trim().toUpperCase();
+                e.preventDefault();
+                let name = sanitizeName(nameInputEl.value.trim().toUpperCase());
                 if (name.length > 0) {
                     hideNamePrompt();
                     submitScore(name, score);
                 }
-                e.stopPropagation();
             }
             if (e.key === "Escape") {
                 hideNamePrompt();
-                e.stopPropagation();
             }
             e.stopPropagation();
         });
@@ -379,7 +426,7 @@
         }
 
         // --- UNIFIED INPUT HANDLER (MOBILE + DESKTOP) ---
-        function triggerGameOver() { state = 'GAMEOVER'; shakeFrames = 15; flashFrames = 3; sfx.crash(); spawnParticles(); }
+        function triggerGameOver() { if (state !== 'PLAY') return; state = 'GAMEOVER'; shakeFrames = 15; flashFrames = 3; sfx.crash(); spawnParticles(); }
         function resetGame() { bird.y = 150; bird.vy = 0; bird.flapTimer = 0; pipes.length = 0; coins.length = 0; score = 0; frames = 0; particles = []; state = 'PLAY'; bird.flap(); }
 
         function handleInput(e) {
@@ -498,26 +545,32 @@
 
         // --- MAIN GAME LOOP ---
         function gameLoop() {
-            if (state === 'SHOP') { drawShop(); requestAnimationFrame(gameLoop); return; }
-            if (state === 'LEADERBOARD') { drawLeaderboard(); requestAnimationFrame(gameLoop); return; }
+            try {
+                if (state === 'SHOP') { drawShop(); requestAnimationFrame(gameLoop); return; }
+                if (state === 'LEADERBOARD') { drawLeaderboard(); requestAnimationFrame(gameLoop); return; }
 
-            let skyIndex = Math.min(Math.floor(score / 20), skyThemes.length - 1);
-            ctx.save(); if (shakeFrames > 0) { ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10); shakeFrames--; }
+                let skyIndex = Math.min(Math.floor(score / 20), skyThemes.length - 1);
+                ctx.save(); if (shakeFrames > 0) { ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10); shakeFrames--; }
 
-            if (state === 'PLAY') { mountX += pipeSpeed * 0.1; cityX += pipeSpeed * 0.3; forestX += pipeSpeed * 0.6; }
+                if (state === 'PLAY') { mountX += pipeSpeed * 0.1; cityX += pipeSpeed * 0.3; forestX += pipeSpeed * 0.6; }
 
-            drawBackground(skyThemes[skyIndex]);
+                drawBackground(skyThemes[skyIndex]);
 
-            if (state === 'PLAY' || state === 'GAMEOVER') {
-                if (state === 'PLAY') bird.update();
-                handleLevelObjects(); drawGround(); drawParticles(); bird.draw(false);
-            } else { drawGround(); bird.y = 150 + Math.sin(frames * 0.1) * 10; bird.draw(true); }
+                if (state === 'PLAY' || state === 'GAMEOVER') {
+                    if (state === 'PLAY') bird.update();
+                    handleLevelObjects(); drawGround(); drawParticles(); bird.draw(false);
+                } else { drawGround(); bird.y = 150 + Math.sin(frames * 0.1) * 10; bird.draw(true); }
 
-            drawUI();
-            if (flashFrames > 0) { ctx.fillStyle = "white"; ctx.fillRect(0,0,canvas.width,canvas.height); flashFrames--; }
-            ctx.restore();
+                drawUI();
+                if (flashFrames > 0) { ctx.fillStyle = "white"; ctx.fillRect(0,0,canvas.width,canvas.height); flashFrames--; }
+                ctx.restore();
 
-            if (state === 'PLAY' || state === 'START') frames++;
+                if (state === 'PLAY' || state === 'START') frames++;
+            } catch(err) {
+                console.error("Game loop error:", err);
+                ctx.restore();
+                state = 'START'; score = 0; pipes.length = 0; coins.length = 0; particles = [];
+            }
             requestAnimationFrame(gameLoop);
         }
 
