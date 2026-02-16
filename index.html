@@ -63,6 +63,8 @@
                 leaderboardData = [];
                 snapshot.forEach(child => { leaderboardData.push(child.val()); });
                 leaderboardData.sort((a, b) => b.score - a.score);
+                let seen = {};
+                leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
                 leaderboardData = leaderboardData.slice(0, 10);
                 leaderboardLoading = false;
             }).catch(() => { leaderboardLoading = false; });
