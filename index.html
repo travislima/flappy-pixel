@@ -370,16 +370,15 @@
 
         nameInputEl.addEventListener("keydown", function(e) {
             if (e.key === "Enter") {
+                e.preventDefault();
                 let name = sanitizeName(nameInputEl.value.trim().toUpperCase());
                 if (name.length > 0) {
                     hideNamePrompt();
                     submitScore(name, score);
                 }
-                e.stopPropagation();
             }
             if (e.key === "Escape") {
                 hideNamePrompt();
-                e.stopPropagation();
             }
             e.stopPropagation();
         });
