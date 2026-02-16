@@ -99,7 +99,7 @@
 
         // --- THE BIRD ---
         const bird = {
-            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.18, jump: -5, flapTimer: 0,
+            x: 50, y: 150, scale: 3, w: 42, h: 30, vy: 0, gravity: 0.15, jump: -4.8, maxFall: 4, flapTimer: 0,
             draw: function(isMenu = false) {
                 let activeSkin = skins.find(s => s.id === equippedSkin) || skins[0];
                 let frame = this.flapTimer > 0 ? activeSkin.down : activeSkin.up;
@@ -113,7 +113,7 @@
                 ctx.restore();
             },
             update: function() {
-                this.vy += this.gravity; this.y += this.vy;
+                this.vy += this.gravity; if (this.vy > this.maxFall) this.vy = this.maxFall; this.y += this.vy;
                 if (this.flapTimer > 0) this.flapTimer--;
                 if (this.y + this.h >= canvas.height - groundHeight) { this.y = canvas.height - groundHeight - this.h; triggerGameOver(); }
                 if (this.y <= 0) { this.y = 0; this.vy = 0; }
@@ -139,8 +139,8 @@
                 let p = pipes[i];
                 drawPixelPipe(p.x, 0, pipeWidth, p.top, true, activePipe); drawPixelPipe(p.x, p.top + pipeGap, pipeWidth, canvas.height - (p.top + pipeGap) - groundHeight, false, activePipe);
                 if (state === 'PLAY') p.x -= pipeSpeed;
-                if (state === 'PLAY' && bird.x < p.x + pipeWidth && bird.x + bird.w > p.x && (bird.y < p.top || bird.y + bird.h > p.top + pipeGap)) triggerGameOver();
-                if (p.x === Math.floor(bird.x)) { score++; sfx.score(); checkHighScore(); }
+                let pad = 6; if (state === 'PLAY' && bird.x + pad < p.x + pipeWidth && bird.x + bird.w - pad > p.x && (bird.y + pad < p.top || bird.y + bird.h - pad > p.top + pipeGap)) triggerGameOver();
+                if (!p.scored && p.x + pipeWidth < bird.x) { p.scored = true; score++; sfx.score(); checkHighScore(); }
                 if (p.x + pipeWidth < -20) { pipes.shift(); i--; }
             }
 
@@ -163,7 +163,7 @@
                 if (c.x < -30) { coins.shift(); i--; }
             }
 
-            if (state === 'PLAY' && frames % 130 === 0) {
+            if (state === 'PLAY' && frames % 160 === 0) {
                 let min = 50; let max = canvas.height - groundHeight - pipeGap - min; let topH = Math.floor(Math.random() * (max - min + 1)) + min;
                 pipes.push({ x: canvas.width, top: topH });
                 if (Math.random() > 0.4) coins.push({ x: canvas.width + pipeWidth/2, y: topH + pipeGap/2, collected: false });
@@ -175,7 +175,7 @@
             let ac = '#F1C40F'; if(equippedSkin === 1) ac = '#3498DB'; if(equippedSkin === 2) ac = '#8E44AD'; if(equippedSkin === 3) ac = '#ECF0F1';
             for(let i=0; i<20; i++) particles.push({ x: bird.x+bird.w/2, y: bird.y+bird.h/2, vx: (Math.random()-0.5)*10, vy: (Math.random()-1)*10, color: Math.random()>0.5?ac:'#FFFFFF', size: Math.random()*6+2 });
         }
-        function drawParticles() { for(let p of particles) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); p.x+=p.vx; p.y+=p.vy; p.vy+=0.5; } }
+        function drawParticles() { for(let i = particles.length - 1; i >= 0; i--) { let p = particles[i]; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); p.x+=p.vx; p.y+=p.vy; p.vy+=0.5; if (p.y > canvas.height + 20) particles.splice(i, 1); } }
 
         // --- PARALLAX RENDERER ---
         function drawParallaxLayer(objects, totalWidth, scrollX, drawFunc, activeTheme) {
