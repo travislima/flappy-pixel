@@ -28,10 +28,54 @@
 <body>
     <div id="gameContainer">
         <canvas id="gameCanvas" width="400" height="500"></canvas>
+        <input type="text" id="nameInput" maxlength="10" placeholder="YOUR NAME"
+            style="position:absolute; opacity:0; pointer-events:none; font-size:16px;">
         <p>Press SPACE or TAP to play</p>
     </div>
 
-    <script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+        import { getDatabase, ref, push, query, orderByChild, limitToLast, get } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAaID8Q-6i--0VvB-T32QGFh7M03IsUs8U",
+            authDomain: "flappy-pixel-game.firebaseapp.com",
+            databaseURL: "https://flappy-pixel-game-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "flappy-pixel-game",
+            storageBucket: "flappy-pixel-game.firebasestorage.app",
+            messagingSenderId: "403169792206",
+            appId: "1:403169792206:web:3460979f9cd872e3c5c09f"
+        };
+        const firebaseApp = initializeApp(firebaseConfig);
+        const db = getDatabase(firebaseApp);
+
+        // --- LEADERBOARD ---
+        let leaderboardData = [];
+        let leaderboardLoading = false;
+        let playerName = localStorage.getItem("flappyPlayerName") || "";
+        let nameInputActive = false;
+        let nameInputValue = "";
+        let scoreSubmitted = false;
+
+        function fetchLeaderboard() {
+            leaderboardLoading = true;
+            const scoresRef = query(ref(db, "scores"), orderByChild("score"), limitToLast(10));
+            get(scoresRef).then(snapshot => {
+                leaderboardData = [];
+                snapshot.forEach(child => { leaderboardData.push(child.val()); });
+                leaderboardData.sort((a, b) => b.score - a.score);
+                leaderboardLoading = false;
+            }).catch(() => { leaderboardLoading = false; });
+        }
+
+        function submitScore(name, scoreVal) {
+            playerName = name;
+            localStorage.setItem("flappyPlayerName", name);
+            push(ref(db, "scores"), { name: name, score: scoreVal, date: Date.now() });
+            scoreSubmitted = true;
+            fetchLeaderboard();
+        }
+
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
 
@@ -231,11 +275,104 @@
             ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 20px 'Courier New'"; ctx.strokeText("BACK", canvas.width/2, 458); ctx.fillText("BACK", canvas.width/2, 458);
         }
 
+        // --- LEADERBOARD & NAME INPUT UI ---
+        const nameInputEl = document.getElementById("nameInput");
+
+        function showNamePrompt() {
+            nameInputActive = true;
+            nameInputValue = playerName;
+            nameInputEl.value = playerName;
+            nameInputEl.style.opacity = "1";
+            nameInputEl.style.pointerEvents = "auto";
+            nameInputEl.style.position = "fixed";
+            nameInputEl.style.top = "50%";
+            nameInputEl.style.left = "50%";
+            nameInputEl.style.transform = "translate(-50%, -50%)";
+            nameInputEl.style.zIndex = "999";
+            nameInputEl.style.fontSize = "20px";
+            nameInputEl.style.padding = "10px";
+            nameInputEl.style.textAlign = "center";
+            nameInputEl.style.fontFamily = "'Courier New', monospace";
+            nameInputEl.style.border = "3px solid #27AE60";
+            nameInputEl.style.borderRadius = "6px";
+            nameInputEl.style.background = "#2C3E50";
+            nameInputEl.style.color = "white";
+            nameInputEl.style.width = "200px";
+            nameInputEl.focus();
+        }
+
+        function hideNamePrompt() {
+            nameInputActive = false;
+            nameInputEl.style.opacity = "0";
+            nameInputEl.style.pointerEvents = "none";
+            nameInputEl.style.position = "absolute";
+            nameInputEl.blur();
+        }
+
+        nameInputEl.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
+                let name = nameInputEl.value.trim().toUpperCase();
+                if (name.length > 0) {
+                    hideNamePrompt();
+                    submitScore(name, score);
+                }
+                e.stopPropagation();
+            }
+            if (e.key === "Escape") {
+                hideNamePrompt();
+                e.stopPropagation();
+            }
+            e.stopPropagation();
+        });
+
+        function drawLeaderboard() {
+            ctx.fillStyle = "#2C3E50"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.textAlign = "center"; ctx.lineWidth = 4; ctx.strokeStyle = "black";
+            ctx.fillStyle = "#F1C40F"; ctx.font = "bold 30px 'Courier New'";
+            ctx.strokeText("LEADERBOARD", canvas.width/2, 50);
+            ctx.fillText("LEADERBOARD", canvas.width/2, 50);
+
+            if (leaderboardLoading) {
+                ctx.fillStyle = "white"; ctx.font = "20px 'Courier New'";
+                ctx.fillText("LOADING...", canvas.width/2, 250);
+            } else if (leaderboardData.length === 0) {
+                ctx.fillStyle = "#7f8c8d"; ctx.font = "18px 'Courier New'";
+                ctx.fillText("NO SCORES YET", canvas.width/2, 250);
+                ctx.fillText("BE THE FIRST!", canvas.width/2, 280);
+            } else {
+                for (let i = 0; i < leaderboardData.length; i++) {
+                    let entry = leaderboardData[i];
+                    let rowY = 90 + (i * 35);
+                    let rankColors = ["#F1C40F", "#D7DBDD", "#CD7F32"];
+                    ctx.fillStyle = i < 3 ? rankColors[i] : "#7f8c8d";
+                    ctx.textAlign = "left"; ctx.font = "bold 20px 'Courier New'";
+                    let rank = (i + 1) + ".";
+                    ctx.strokeText(rank, 30, rowY);
+                    ctx.fillText(rank, 30, rowY);
+                    ctx.fillStyle = "white";
+                    ctx.strokeText(entry.name, 80, rowY);
+                    ctx.fillText(entry.name, 80, rowY);
+                    ctx.textAlign = "right";
+                    ctx.fillStyle = i < 3 ? rankColors[i] : "white";
+                    ctx.strokeText(entry.score, 370, rowY);
+                    ctx.fillText(entry.score, 370, rowY);
+                }
+            }
+
+            ctx.fillStyle = "#E74C3C"; ctx.fillRect(140, 450, 120, 40);
+            ctx.strokeRect(140, 450, 120, 40);
+            ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.font = "bold 20px 'Courier New'";
+            ctx.strokeText("BACK", canvas.width/2, 478);
+            ctx.fillText("BACK", canvas.width/2, 478);
+        }
+
         // --- UNIFIED INPUT HANDLER (MOBILE + DESKTOP) ---
         function triggerGameOver() { state = 'GAMEOVER'; shakeFrames = 15; flashFrames = 3; sfx.crash(); spawnParticles(); }
         function resetGame() { bird.y = 150; bird.vy = 0; bird.flapTimer = 0; pipes.length = 0; coins.length = 0; score = 0; frames = 0; particles = []; state = 'PLAY'; bird.flap(); }
 
         function handleInput(e) {
+            // Ignore input while name entry is active
+            if (nameInputActive) return;
             // Ignore keys other than Spacebar
             if (e && e.type === "keydown" && e.code !== "Space") return;
             if (e && e.cancelable) e.preventDefault(); // Stop mobile zooming/double-firing
@@ -255,11 +392,23 @@
 
             if (state === 'START') {
                 if (e && e.type === "keydown") resetGame();
-                else if (x > 120 && x < 280 && y > 240 && y < 290) resetGame();
-                else if (x > 120 && x < 280 && y > 310 && y < 360) state = 'SHOP';
+                else if (x > 120 && x < 280 && y > 220 && y < 265) resetGame();
+                else if (x > 120 && x < 280 && y > 280 && y < 325) state = 'SHOP';
+                else if (x > 120 && x < 280 && y > 340 && y < 385) { state = 'LEADERBOARD'; fetchLeaderboard(); }
             }
             else if (state === 'PLAY') bird.flap();
-            else if (state === 'GAMEOVER') state = 'START';
+            else if (state === 'GAMEOVER') {
+                if (!scoreSubmitted && score > 0 && x > 100 && x < 300 && y > 355 && y < 395) {
+                    if (playerName) { submitScore(playerName, score); }
+                    else { showNamePrompt(); }
+                    return;
+                }
+                if (nameInputActive) return;
+                scoreSubmitted = false; state = 'START';
+            }
+            else if (state === 'LEADERBOARD') {
+                if ((e && e.type === "keydown") || (x > 140 && x < 260 && y > 450 && y < 490)) { state = 'START'; sfx.flap(); }
+            }
             else if (state === 'SHOP') {
                 if (e && e.type === "keydown") { state = 'START'; return; } // Space exits shop
                 if (x > 140 && x < 260 && y > 430 && y < 470) { state = 'START'; sfx.flap(); return; }
@@ -283,13 +432,14 @@
 
         // --- RENDER UI ---
         function drawUI() {
-            if (state === 'SHOP') return;
+            if (state === 'SHOP' || state === 'LEADERBOARD') return;
             ctx.textAlign = "center"; ctx.lineWidth = 4; ctx.strokeStyle = "black";
 
             if (state === 'START') {
                 ctx.fillStyle = "white"; ctx.font = "bold 40px 'Courier New'"; ctx.strokeText("FLAPPY PIXEL", canvas.width/2, 110); ctx.fillText("FLAPPY PIXEL", canvas.width/2, 110);
-                ctx.fillStyle = "#27AE60"; ctx.fillRect(120, 240, 160, 50); ctx.strokeRect(120, 240, 160, 50); ctx.fillStyle = "white"; ctx.font = "bold 25px 'Courier New'"; ctx.strokeText("PLAY", canvas.width/2, 275); ctx.fillText("PLAY", canvas.width/2, 275);
-                ctx.fillStyle = "#8E44AD"; ctx.fillRect(120, 310, 160, 50); ctx.strokeRect(120, 310, 160, 50); ctx.fillStyle = "white"; ctx.strokeText("SHOP", canvas.width/2, 345); ctx.fillText("SHOP", canvas.width/2, 345);
+                ctx.fillStyle = "#27AE60"; ctx.fillRect(120, 220, 160, 45); ctx.strokeRect(120, 220, 160, 45); ctx.fillStyle = "white"; ctx.font = "bold 25px 'Courier New'"; ctx.strokeText("PLAY", canvas.width/2, 252); ctx.fillText("PLAY", canvas.width/2, 252);
+                ctx.fillStyle = "#8E44AD"; ctx.fillRect(120, 280, 160, 45); ctx.strokeRect(120, 280, 160, 45); ctx.fillStyle = "white"; ctx.strokeText("SHOP", canvas.width/2, 312); ctx.fillText("SHOP", canvas.width/2, 312);
+                ctx.fillStyle = "#E67E22"; ctx.fillRect(120, 340, 160, 45); ctx.strokeRect(120, 340, 160, 45); ctx.fillStyle = "white"; ctx.strokeText("SCORES", canvas.width/2, 372); ctx.fillText("SCORES", canvas.width/2, 372);
             }
             else if (state === 'PLAY') {
                 ctx.fillStyle = "white"; ctx.font = "bold 50px 'Courier New'"; ctx.strokeText(score, canvas.width/2, 70); ctx.fillText(score, canvas.width/2, 70);
@@ -298,23 +448,37 @@
             }
             else if (state === 'GAMEOVER') {
                 ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(0,0,canvas.width,canvas.height);
-                ctx.fillStyle = "#DED895"; ctx.fillRect(50, 140, 300, 210); ctx.strokeStyle = "black"; ctx.strokeRect(50, 140, 300, 210);
-                ctx.fillStyle = "white"; ctx.font = "bold 40px 'Courier New'"; ctx.strokeText("GAME OVER", canvas.width/2, 110); ctx.fillText("GAME OVER", canvas.width/2, 110);
-                ctx.fillStyle = "black"; ctx.font = "bold 20px 'Courier New'"; ctx.fillText("SCORE", 250, 175); ctx.fillText("BEST", 250, 240);
-                ctx.fillStyle = "white"; ctx.font = "bold 30px 'Courier New'"; ctx.strokeText(score, 250, 205); ctx.fillText(score, 250, 205); ctx.strokeText(highScore, 250, 270); ctx.fillText(highScore, 250, 270);
-                ctx.fillStyle = "black"; ctx.font = "bold 20px 'Courier New'"; ctx.fillText("MEDAL", 120, 175);
+                ctx.fillStyle = "#DED895"; ctx.fillRect(50, 120, 300, 210); ctx.strokeStyle = "black"; ctx.strokeRect(50, 120, 300, 210);
+                ctx.fillStyle = "white"; ctx.font = "bold 40px 'Courier New'"; ctx.strokeText("GAME OVER", canvas.width/2, 95); ctx.fillText("GAME OVER", canvas.width/2, 95);
+                ctx.fillStyle = "black"; ctx.font = "bold 20px 'Courier New'"; ctx.fillText("SCORE", 250, 155); ctx.fillText("BEST", 250, 220);
+                ctx.fillStyle = "white"; ctx.font = "bold 30px 'Courier New'"; ctx.strokeText(score, 250, 185); ctx.fillText(score, 250, 185); ctx.strokeText(highScore, 250, 250); ctx.fillText(highScore, 250, 250);
+                ctx.fillStyle = "black"; ctx.font = "bold 20px 'Courier New'"; ctx.fillText("MEDAL", 120, 155);
 
                 let medalColor = "#A6ACAF";
                 if (score >= 40) medalColor = "#E5E4E2"; else if (score >= 30) medalColor = "#F1C40F"; else if (score >= 20) medalColor = "#D7DBDD"; else if (score >= 10) medalColor = "#CD7F32";
-                ctx.fillStyle = medalColor; ctx.beginPath(); ctx.arc(120, 230, 35, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.arc(120, 230, 25, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = "#F1C40F"; ctx.font = "bold 25px 'Courier New'"; ctx.strokeText("BANK: " + totalCoins, canvas.width/2, 330); ctx.fillText("BANK: " + totalCoins, canvas.width/2, 330);
-                ctx.fillStyle = "white"; ctx.font = "20px 'Courier New'"; ctx.strokeText("Tap to Retry", canvas.width/2, 400); ctx.fillText("Tap to Retry", canvas.width/2, 400);
+                ctx.fillStyle = medalColor; ctx.beginPath(); ctx.arc(120, 210, 35, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.fillStyle = "rgba(255,255,255,0.3)"; ctx.beginPath(); ctx.arc(120, 210, 25, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#F1C40F"; ctx.font = "bold 25px 'Courier New'"; ctx.strokeText("BANK: " + totalCoins, canvas.width/2, 310); ctx.fillText("BANK: " + totalCoins, canvas.width/2, 310);
+
+                if (!scoreSubmitted && score > 0) {
+                    ctx.fillStyle = "#27AE60"; ctx.fillRect(100, 355, 200, 40);
+                    ctx.strokeRect(100, 355, 200, 40);
+                    ctx.fillStyle = "white"; ctx.font = "bold 18px 'Courier New'";
+                    ctx.strokeText("SUBMIT SCORE", canvas.width/2, 382);
+                    ctx.fillText("SUBMIT SCORE", canvas.width/2, 382);
+                } else if (scoreSubmitted) {
+                    ctx.fillStyle = "#7f8c8d"; ctx.font = "bold 18px 'Courier New'";
+                    ctx.strokeText("SCORE SAVED!", canvas.width/2, 382);
+                    ctx.fillText("SCORE SAVED!", canvas.width/2, 382);
+                }
+
+                ctx.fillStyle = "white"; ctx.font = "20px 'Courier New'"; ctx.strokeText("Tap to Retry", canvas.width/2, 440); ctx.fillText("Tap to Retry", canvas.width/2, 440);
             }
         }
 
         // --- MAIN GAME LOOP ---
         function gameLoop() {
             if (state === 'SHOP') { drawShop(); requestAnimationFrame(gameLoop); return; }
+            if (state === 'LEADERBOARD') { drawLeaderboard(); requestAnimationFrame(gameLoop); return; }
 
             let skyIndex = Math.min(Math.floor(score / 20), skyThemes.length - 1);
             ctx.save(); if (shakeFrames > 0) { ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10); shakeFrames--; }
