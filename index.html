@@ -163,7 +163,7 @@
                 if (c.x < -30) { coins.shift(); i--; }
             }
 
-            if (state === 'PLAY' && frames % 160 === 0) {
+            if (state === 'PLAY' && frames % 145 === 0) {
                 let min = 50; let max = canvas.height - groundHeight - pipeGap - min; let topH = Math.floor(Math.random() * (max - min + 1)) + min;
                 pipes.push({ x: canvas.width, top: topH });
                 if (Math.random() > 0.4) coins.push({ x: canvas.width + pipeWidth/2, y: topH + pipeGap/2, collected: false });
