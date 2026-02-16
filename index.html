@@ -42,7 +42,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-        import { getDatabase, ref, push, get, query, orderByChild, limitToLast } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
+        import { getDatabase, ref, push, get } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAaID8Q-6i--0VvB-T32QGFh7M03IsUs8U",
@@ -66,8 +66,7 @@
 
         function fetchLeaderboard() {
             leaderboardLoading = true;
-            let q = query(ref(db, "scores"), orderByChild("score"), limitToLast(50));
-            get(q).then(snapshot => {
+            get(ref(db, "scores")).then(snapshot => {
                 leaderboardData = [];
                 snapshot.forEach(child => { leaderboardData.push(child.val()); });
                 leaderboardData.sort((a, b) => b.score - a.score);
