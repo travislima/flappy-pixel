@@ -437,9 +437,13 @@
         function resetGame() { bird.y = 150; bird.vy = 0; bird.flapTimer = 0; pipes.length = 0; coins.length = 0; score = 0; frames = 0; particles = []; state = 'PLAY'; bird.flap(); }
 
         function handleInput(e) {
-            // Dismiss name entry on canvas tap/click
+            // On canvas tap while name input is open: submit if name was typed, otherwise cancel
             if (nameInputActive) {
-                if (e && (e.type === "mousedown" || e.type === "touchstart")) { hideNamePrompt(); }
+                if (e && (e.type === "mousedown" || e.type === "touchstart")) {
+                    let name = sanitizeName(nameInputEl.value.trim().toUpperCase());
+                    hideNamePrompt();
+                    if (name.length > 0) submitScore(name, score);
+                }
                 return;
             }
             // Ignore keys other than Spacebar
@@ -556,7 +560,11 @@
                     ctx.fillText("SCORE SAVED!", canvas.width/2, 382);
                 }
 
-                ctx.fillStyle = "white"; ctx.font = "20px 'Courier New'"; ctx.strokeText("Tap to Retry", canvas.width/2, 440); ctx.fillText("Tap to Retry", canvas.width/2, 440);
+                if (nameInputActive) {
+                    ctx.fillStyle = "#27AE60"; ctx.font = "bold 20px 'Courier New'"; ctx.strokeText("TAP TO SAVE", canvas.width/2, 440); ctx.fillText("TAP TO SAVE", canvas.width/2, 440);
+                } else {
+                    ctx.fillStyle = "white"; ctx.font = "20px 'Courier New'"; ctx.strokeText("Tap to Retry", canvas.width/2, 440); ctx.fillText("Tap to Retry", canvas.width/2, 440);
+                }
             }
         }
 
