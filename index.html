@@ -76,7 +76,7 @@
                 leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
                 leaderboardData = leaderboardData.slice(0, 10);
                 leaderboardLoading = false;
-            }).catch(() => { leaderboardLoading = false; });
+            }).catch(err => { console.error("Leaderboard fetch failed:", err); leaderboardLoading = false; });
         }
 
         function sanitizeName(name) {
@@ -99,7 +99,8 @@
                     scoreSubmitting = false;
                     fetchLeaderboard();
                 })
-                .catch(() => {
+                .catch(err => {
+                    console.error("Score submit failed:", err);
                     scoreSubmitting = false;
                     submitFailed = true;
                 });
