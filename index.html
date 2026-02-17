@@ -64,6 +64,7 @@
         let scoreSubmitted = false;
         let scoreSubmitting = false;
         let submitFailed = false;
+        let submitError = "";
 
         function fetchLeaderboard() {
             leaderboardLoading = true;
@@ -90,6 +91,7 @@
             if (!name || scoreVal <= 0) return;
             scoreSubmitting = true;
             submitFailed = false;
+            submitError = "";
             playerName = name;
             localStorage.setItem("flappyPlayerName", name);
             let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
@@ -101,6 +103,7 @@
                 })
                 .catch(err => {
                     console.error("Score submit failed:", err);
+                    submitError = err && err.message ? err.message : String(err);
                     scoreSubmitting = false;
                     submitFailed = true;
                 });
@@ -540,6 +543,7 @@
                     ctx.fillStyle = "white"; ctx.font = "bold 16px 'Courier New'";
                     ctx.strokeText("FAILED-TAP RETRY", canvas.width/2, 382);
                     ctx.fillText("FAILED-TAP RETRY", canvas.width/2, 382);
+                    if (submitError) { ctx.font = "12px 'Courier New'"; ctx.fillStyle = "#E74C3C"; ctx.strokeText(submitError, canvas.width/2, 405); ctx.fillText(submitError, canvas.width/2, 405); }
                 } else if (!scoreSubmitted && score > 0) {
                     ctx.fillStyle = "#27AE60"; ctx.fillRect(100, 355, 200, 40);
                     ctx.strokeRect(100, 355, 200, 40);
