@@ -63,6 +63,7 @@
         let nameInputActive = false;
         let scoreSubmitted = false;
         let scoreSubmitting = false;
+        let submitFailed = false;
 
         function fetchLeaderboard() {
             leaderboardLoading = true;
@@ -88,6 +89,7 @@
             scoreVal = Math.max(0, Math.min(Math.floor(scoreVal), 9999));
             if (!name || scoreVal <= 0) return;
             scoreSubmitting = true;
+            submitFailed = false;
             playerName = name;
             localStorage.setItem("flappyPlayerName", name);
             let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
@@ -99,6 +101,7 @@
                 })
                 .catch(() => {
                     scoreSubmitting = false;
+                    submitFailed = true;
                 });
         }
 
@@ -117,7 +120,7 @@
         if (!unlockedSkins.includes(equippedSkin)) equippedSkin = 0;
 
         const pipeSpeed = 2.5; const pipeGap = 140; const pipeWidth = 60; const groundHeight = 40; let groundX = 0;
-        let shakeFrames = 0; let flashFrames = 0; let particles = [];
+        let shakeFrames = 0; let flashFrames = 0; let particles = []; let gameOverTime = 0;
         let mountX = 0; let cityX = 0; let forestX = 0;
 
         // --- 8-BIT AUDIO ---
@@ -426,7 +429,7 @@
         }
 
         // --- UNIFIED INPUT HANDLER (MOBILE + DESKTOP) ---
-        function triggerGameOver() { if (state !== 'PLAY') return; state = 'GAMEOVER'; shakeFrames = 15; flashFrames = 3; sfx.crash(); spawnParticles(); }
+        function triggerGameOver() { if (state !== 'PLAY') return; state = 'GAMEOVER'; gameOverTime = Date.now(); shakeFrames = 15; flashFrames = 3; sfx.crash(); spawnParticles(); }
         function resetGame() { bird.y = 150; bird.vy = 0; bird.flapTimer = 0; pipes.length = 0; coins.length = 0; score = 0; frames = 0; particles = []; state = 'PLAY'; bird.flap(); }
 
         function handleInput(e) {
@@ -460,13 +463,16 @@
             }
             else if (state === 'PLAY') bird.flap();
             else if (state === 'GAMEOVER') {
-                if (!scoreSubmitted && !scoreSubmitting && score > 0 && x > 100 && x < 300 && y > 355 && y < 395) {
+                if (Date.now() - gameOverTime < 600) return; // Cooldown prevents accidental tap-through
+                if (scoreSubmitting) return;
+                let hitSubmit = (x > 100 && x < 300 && y > 355 && y < 395);
+                let isKeyboard = (e && e.type === "keydown");
+                if (!scoreSubmitted && score > 0 && (hitSubmit || isKeyboard)) {
                     if (playerName) { submitScore(playerName, score); }
                     else { showNamePrompt(); }
                     return;
                 }
-                if (scoreSubmitting) return;
-                scoreSubmitted = false; scoreSubmitting = false; state = 'START';
+                scoreSubmitted = false; scoreSubmitting = false; submitFailed = false; state = 'START';
             }
             else if (state === 'LEADERBOARD') {
                 if ((e && e.type === "keydown") || (x > 140 && x < 260 && y > 450 && y < 490)) { state = 'START'; sfx.flap(); }
@@ -527,6 +533,12 @@
                     ctx.fillStyle = "white"; ctx.font = "bold 18px 'Courier New'";
                     ctx.strokeText("SUBMITTING...", canvas.width/2, 382);
                     ctx.fillText("SUBMITTING...", canvas.width/2, 382);
+                } else if (submitFailed && !scoreSubmitted && score > 0) {
+                    ctx.fillStyle = "#E74C3C"; ctx.fillRect(100, 355, 200, 40);
+                    ctx.strokeRect(100, 355, 200, 40);
+                    ctx.fillStyle = "white"; ctx.font = "bold 16px 'Courier New'";
+                    ctx.strokeText("FAILED-TAP RETRY", canvas.width/2, 382);
+                    ctx.fillText("FAILED-TAP RETRY", canvas.width/2, 382);
                 } else if (!scoreSubmitted && score > 0) {
                     ctx.fillStyle = "#27AE60"; ctx.fillRect(100, 355, 200, 40);
                     ctx.strokeRect(100, 355, 200, 40);
