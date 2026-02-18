@@ -73,6 +73,8 @@
                 leaderboardData = [];
                 snapshot.forEach(child => { let v = child.val(); if (v && typeof v.name === 'string' && typeof v.score === 'number') leaderboardData.push(v); });
                 leaderboardData.sort((a, b) => b.score - a.score);
+                let seen = {};
+                leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
                 leaderboardData = leaderboardData.slice(0, 10);
                 leaderboardLoading = false;
             }).catch(err => { console.error("Leaderboard fetch failed:", err); leaderboardLoading = false; });
@@ -87,12 +89,13 @@
         function findUniqueName(baseName, existingNames) {
             let upper = baseName.toUpperCase();
             if (!existingNames.has(upper)) return baseName;
+            let truncated = baseName.slice(0, 8); // Leave room for 2-digit suffix
             for (let i = 1; i <= 99; i++) {
                 let suffix = i < 10 ? "0" + i : "" + i;
-                let candidate = (baseName + suffix).slice(0, 10);
+                let candidate = truncated + suffix;
                 if (!existingNames.has(candidate.toUpperCase())) return candidate;
             }
-            return baseName + Math.floor(Math.random() * 900 + 100);
+            return truncated + Math.floor(Math.random() * 90 + 10);
         }
 
         function submitScore(name, scoreVal) {
