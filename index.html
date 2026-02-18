@@ -73,8 +73,6 @@
                 leaderboardData = [];
                 snapshot.forEach(child => { let v = child.val(); if (v && typeof v.name === 'string' && typeof v.score === 'number') leaderboardData.push(v); });
                 leaderboardData.sort((a, b) => b.score - a.score);
-                let seen = {};
-                leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
                 leaderboardData = leaderboardData.slice(0, 10);
                 leaderboardLoading = false;
             }).catch(err => { console.error("Leaderboard fetch failed:", err); leaderboardLoading = false; });
@@ -82,6 +80,19 @@
 
         function sanitizeName(name) {
             return name.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 10);
+        }
+
+        let savedAsName = ""; // The final unique name assigned after submission
+
+        function findUniqueName(baseName, existingNames) {
+            let upper = baseName.toUpperCase();
+            if (!existingNames.has(upper)) return baseName;
+            for (let i = 1; i <= 99; i++) {
+                let suffix = i < 10 ? "0" + i : "" + i;
+                let candidate = (baseName + suffix).slice(0, 10);
+                if (!existingNames.has(candidate.toUpperCase())) return candidate;
+            }
+            return baseName + Math.floor(Math.random() * 900 + 100);
         }
 
         function submitScore(name, scoreVal) {
@@ -92,11 +103,21 @@
             scoreSubmitting = true;
             submitFailed = false;
             submitError = "";
-            playerName = name;
-            localStorage.setItem("flappyPlayerName", name);
             let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
-            Promise.race([push(ref(db, "scores"), { name: name, score: scoreVal, date: Date.now() }), timeout])
-                .then(() => {
+            // If player already has an assigned name, skip uniqueness check
+            let nameReady = playerName ? Promise.resolve(playerName) :
+                Promise.race([get(ref(db, "scores")), timeout]).then(snapshot => {
+                    let existing = new Set();
+                    snapshot.forEach(child => { let v = child.val(); if (v && v.name) existing.add(v.name.toUpperCase()); });
+                    return findUniqueName(name, existing);
+                });
+            nameReady.then(uniqueName => {
+                uniqueName = sanitizeName(uniqueName);
+                playerName = uniqueName;
+                localStorage.setItem("flappyPlayerName", uniqueName);
+                savedAsName = uniqueName;
+                return Promise.race([push(ref(db, "scores"), { name: uniqueName, score: scoreVal, date: Date.now() }), timeout]);
+            }).then(() => {
                     scoreSubmitted = true;
                     scoreSubmitting = false;
                     fetchLeaderboard();
@@ -480,7 +501,7 @@
                     else { showNamePrompt(); }
                     return;
                 }
-                scoreSubmitted = false; scoreSubmitting = false; submitFailed = false; state = 'START';
+                scoreSubmitted = false; scoreSubmitting = false; submitFailed = false; savedAsName = ""; state = 'START';
             }
             else if (state === 'LEADERBOARD') {
                 if ((e && e.type === "keydown") || (x > 140 && x < 260 && y > 450 && y < 490)) { state = 'START'; sfx.flap(); }
@@ -555,9 +576,13 @@
                     ctx.strokeText("SUBMIT SCORE", canvas.width/2, 382);
                     ctx.fillText("SUBMIT SCORE", canvas.width/2, 382);
                 } else if (scoreSubmitted) {
-                    ctx.fillStyle = "#7f8c8d"; ctx.font = "bold 18px 'Courier New'";
-                    ctx.strokeText("SCORE SAVED!", canvas.width/2, 382);
-                    ctx.fillText("SCORE SAVED!", canvas.width/2, 382);
+                    ctx.fillStyle = "#27AE60"; ctx.font = "bold 16px 'Courier New'";
+                    let savedMsg = savedAsName ? "SAVED: " + savedAsName : "SCORE SAVED!";
+                    ctx.strokeText(savedMsg, canvas.width/2, 378);
+                    ctx.fillText(savedMsg, canvas.width/2, 378);
+                    ctx.fillStyle = "white"; ctx.font = "14px 'Courier New'";
+                    ctx.strokeText("SCORE: " + score, canvas.width/2, 398);
+                    ctx.fillText("SCORE: " + score, canvas.width/2, 398);
                 }
 
                 if (nameInputActive) {
