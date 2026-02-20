@@ -1,0 +1,22 @@
+{
+    "name": "Flappy Pixel",
+    "short_name": "Flappy Pixel",
+    "description": "A free retro pixel-art browser game. Tap to fly, collect coins, unlock skins, and compete on the global leaderboard.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#1a252c",
+    "theme_color": "#1a252c",
+    "categories": ["games", "entertainment"],
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

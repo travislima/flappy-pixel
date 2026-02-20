@@ -3,15 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="description" content="A retro pixel-art arcade game with skins, coins, and a global leaderboard. Tap to fly and dodge pipes!">
+
+    <!-- Primary SEO -->
+    <title>Flappy Pixel - Play Free Online | Retro Pixel Bird Game</title>
+    <meta name="description" content="Play Flappy Pixel free in your browser - a retro pixel-art bird game with unlockable skins, coins, and a global leaderboard. No download, no signup. Tap to fly and dodge pipes!">
+    <meta name="robots" content="index, follow">
     <meta name="theme-color" content="#1a252c">
-    <meta property="og:title" content="Flappy Pixel">
-    <meta property="og:description" content="A retro pixel-art arcade game with skins and a global leaderboard. How high can you score?">
+    <meta name="keywords" content="flappy pixel, flappy bird online, free browser game, pixel bird game, play online free, no download game, HTML5 game, retro arcade game, tap to fly, unblocked game">
+
+    <!-- Open Graph (Facebook, Discord, LinkedIn, iMessage, etc.) -->
+    <meta property="og:title" content="Flappy Pixel - Free Retro Pixel Bird Game">
+    <meta property="og:description" content="Tap to fly and dodge pipes in this retro pixel-art browser game. Unlock skins, collect coins, and compete on the global leaderboard. No download required!">
     <meta property="og:type" content="website">
+    <meta property="og:image" content="/og-image.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Flappy Pixel game screenshot showing a pixel bird flying between pipes">
+    <meta property="og:site_name" content="Flappy Pixel">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Flappy Pixel - Free Retro Pixel Bird Game">
+    <meta name="twitter:description" content="Tap to fly and dodge pipes! A free retro pixel-art browser game with skins, coins, and a global leaderboard.">
+    <meta name="twitter:image" content="/og-image.png">
+    <meta name="twitter:image:alt" content="Flappy Pixel game screenshot">
+
+    <!-- Mobile App -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Flappy Pixel">
+    <meta name="apple-mobile-web-app-title" content="Flappy Pixel">
+
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='4' y='2' width='8' height='8' rx='2' fill='%23F1C40F'/><rect x='9' y='3' width='3' height='3' rx='1' fill='white'/><rect x='10' y='4' width='1' height='1' fill='black'/><rect x='4' y='7' width='5' height='2' fill='%23E67E22'/></svg>">
-    <title>Flappy Pixel</title>
+    <link rel="manifest" href="/manifest.json">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": ["VideoGame", "WebApplication"],
+        "name": "Flappy Pixel",
+        "description": "A free retro pixel-art browser game where you tap to fly a bird through pipes. Features unlockable skins, collectible coins, and a global leaderboard.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript. Works in any modern web browser.",
+        "gamePlatform": ["Web Browser", "Desktop", "Mobile"],
+        "playMode": "SinglePlayer",
+        "genre": ["Arcade", "Casual", "Endless Runner"],
+        "isFamilyFriendly": true,
+        "inLanguage": "en",
+        "image": "/og-image.png",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock"
+        }
+    }
+    </script>
     <style>
         body {
             margin: 0; display: flex; justify-content: center; align-items: center;
@@ -31,15 +81,35 @@
         #gameContainer { text-align: center; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         p { margin-top: 15px; font-size: 1rem; color: #7f8c8d; }
         @media (max-width: 500px) { p { display: none; } } /* Hide instructions on small phones */
+        .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     </style>
 </head>
 <body>
-    <div id="gameContainer">
-        <canvas id="gameCanvas" width="400" height="500"></canvas>
-        <input type="text" id="nameInput" maxlength="10" placeholder="YOUR NAME"
-            style="position:absolute; opacity:0; pointer-events:none; font-size:16px;">
-        <p>Press SPACE or TAP to play</p>
-    </div>
+    <main>
+        <h1 class="visually-hidden">Flappy Pixel - Free Online Retro Pixel Bird Game</h1>
+        <div id="gameContainer">
+            <canvas id="gameCanvas" width="400" height="500"></canvas>
+            <input type="text" id="nameInput" maxlength="10" placeholder="YOUR NAME"
+                style="position:absolute; opacity:0; pointer-events:none; font-size:16px;">
+            <p>Press SPACE or TAP to play</p>
+        </div>
+    </main>
+
+    <noscript>
+        <article>
+            <h2>Flappy Pixel - Free Retro Pixel Bird Game</h2>
+            <p>Flappy Pixel is a free browser-based arcade game inspired by classic flappy bird games. Tap or press spacebar to make your pixel bird fly through pipes. Features include:</p>
+            <ul>
+                <li>Unlockable character skins (Blue Jay, Vampire Bat, Spooky Ghost, and more)</li>
+                <li>Collectible coins and an in-game shop</li>
+                <li>Global leaderboard to compete with players worldwide</li>
+                <li>Retro pixel-art graphics with parallax backgrounds</li>
+                <li>Day, sunset, and night sky themes that change as you progress</li>
+                <li>8-bit sound effects</li>
+            </ul>
+            <p>Play free online with no download and no signup required. Works on desktop and mobile browsers.</p>
+        </article>
+    </noscript>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
