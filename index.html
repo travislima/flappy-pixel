@@ -67,12 +67,35 @@
         let submitFailed = false;
         let submitError = "";
 
+        // --- PROFANITY FILTER ---
+        const badWords = ["FUCK","SHIT","COCK","CUNT","BITCH","NIGGE","NIGGA","FAGGO","WHORE","SLUT","PUSSY","NAZI","RAPE","PISS","PENIS","TWAT","WANK","CHINK","KIKE","GOOK"];
+        function hasProfanity(name) {
+            let upper = name.toUpperCase().replace(/[^A-Z]/g, '');
+            return badWords.some(w => upper.includes(w));
+        }
+
+        // --- COUNTRY FLAG ---
+        let playerCountry = "";
+        (async function() {
+            try {
+                let ctrl = new AbortController();
+                setTimeout(() => ctrl.abort(), 3000);
+                let res = await fetch("https://api.country.is/", { signal: ctrl.signal });
+                let data = await res.json();
+                if (data && data.country && data.country.length === 2) playerCountry = data.country;
+            } catch(e) {}
+        })();
+        function countryToFlag(code) {
+            if (!code || code.length !== 2) return "";
+            return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+        }
+
         function fetchLeaderboard() {
             leaderboardLoading = true;
             let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
             Promise.race([get(ref(db, "scores")), timeout]).then(snapshot => {
                 leaderboardData = [];
-                snapshot.forEach(child => { let v = child.val(); if (v && typeof v.name === 'string' && typeof v.score === 'number') leaderboardData.push(v); });
+                snapshot.forEach(child => { let v = child.val(); if (v && typeof v.name === 'string' && typeof v.score === 'number') leaderboardData.push({ name: v.name, score: v.score, country: v.country || "" }); });
                 leaderboardData.sort((a, b) => b.score - a.score);
                 let seen = {};
                 leaderboardData = leaderboardData.filter(e => { let k = e.name.toUpperCase(); if (seen[k]) return false; seen[k] = true; return true; });
@@ -104,12 +127,13 @@
             name = sanitizeName(name);
             scoreVal = Math.max(0, Math.min(Math.floor(scoreVal), 9999));
             if (!name || scoreVal <= 0) return;
+            if (hasProfanity(name)) { submitFailed = true; submitError = "BAD NAME"; return; }
             scoreSubmitting = true;
             submitFailed = false;
             submitError = "";
             let timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000));
-            // If player already has an assigned name, skip uniqueness check
-            let nameReady = playerName ? Promise.resolve(playerName) :
+            // Skip uniqueness check only if name matches saved name exactly
+            let nameReady = (playerName && name === playerName) ? Promise.resolve(playerName) :
                 Promise.race([get(ref(db, "scores")), timeout]).then(snapshot => {
                     let existing = new Set();
                     snapshot.forEach(child => { let v = child.val(); if (v && v.name) existing.add(v.name.toUpperCase()); });
@@ -120,7 +144,9 @@
                 playerName = uniqueName;
                 localStorage.setItem("flappyPlayerName", uniqueName);
                 savedAsName = uniqueName;
-                return Promise.race([push(ref(db, "scores"), { name: uniqueName, score: scoreVal, date: Date.now() }), timeout]);
+                let scoreData = { name: uniqueName, score: scoreVal, date: Date.now() };
+                if (playerCountry) scoreData.country = playerCountry;
+                return Promise.race([push(ref(db, "scores"), scoreData), timeout]);
             }).then(() => {
                     scoreSubmitted = true;
                     scoreSubmitting = false;
@@ -406,6 +432,13 @@
                 e.preventDefault();
                 let name = sanitizeName(nameInputEl.value.trim().toUpperCase());
                 if (name.length > 0) {
+                    if (hasProfanity(name)) {
+                        nameInputEl.style.border = "3px solid #E74C3C";
+                        nameInputEl.value = "";
+                        nameInputEl.placeholder = "TRY ANOTHER";
+                        setTimeout(() => { nameInputEl.style.border = "3px solid #27AE60"; nameInputEl.placeholder = "YOUR NAME"; }, 1500);
+                        return;
+                    }
                     hideNamePrompt();
                     submitScore(name, score);
                 }
@@ -441,8 +474,10 @@
                     ctx.strokeText(rank, 30, rowY);
                     ctx.fillText(rank, 30, rowY);
                     ctx.fillStyle = "white";
-                    ctx.strokeText(entry.name, 80, rowY);
-                    ctx.fillText(entry.name, 80, rowY);
+                    let flag = countryToFlag(entry.country);
+                    let nameDisplay = flag ? flag + " " + entry.name : entry.name;
+                    ctx.strokeText(nameDisplay, 80, rowY);
+                    ctx.fillText(nameDisplay, 80, rowY);
                     ctx.textAlign = "right";
                     ctx.fillStyle = i < 3 ? rankColors[i] : "white";
                     ctx.strokeText(entry.score, 370, rowY);
@@ -466,6 +501,13 @@
             if (nameInputActive) {
                 if (e && (e.type === "mousedown" || e.type === "touchstart")) {
                     let name = sanitizeName(nameInputEl.value.trim().toUpperCase());
+                    if (name.length > 0 && hasProfanity(name)) {
+                        nameInputEl.style.border = "3px solid #E74C3C";
+                        nameInputEl.value = "";
+                        nameInputEl.placeholder = "TRY ANOTHER";
+                        setTimeout(() => { nameInputEl.style.border = "3px solid #27AE60"; nameInputEl.placeholder = "YOUR NAME"; }, 1500);
+                        return;
+                    }
                     hideNamePrompt();
                     if (name.length > 0) submitScore(name, score);
                 }
@@ -501,8 +543,7 @@
                 let hitSubmit = (x > 100 && x < 300 && y > 355 && y < 395);
                 let isKeyboard = (e && e.type === "keydown");
                 if (!scoreSubmitted && score > 0 && (hitSubmit || isKeyboard)) {
-                    if (playerName) { submitScore(playerName, score); }
-                    else { showNamePrompt(); }
+                    showNamePrompt();
                     return;
                 }
                 scoreSubmitted = false; scoreSubmitting = false; submitFailed = false; savedAsName = ""; state = 'START';
@@ -579,6 +620,11 @@
                     ctx.fillStyle = "white"; ctx.font = "bold 18px 'Courier New'";
                     ctx.strokeText("SUBMIT SCORE", canvas.width/2, 382);
                     ctx.fillText("SUBMIT SCORE", canvas.width/2, 382);
+                    if (playerName) {
+                        ctx.fillStyle = "#7f8c8d"; ctx.font = "12px 'Courier New'";
+                        ctx.strokeText("NAME: " + playerName, canvas.width/2, 405);
+                        ctx.fillText("NAME: " + playerName, canvas.width/2, 405);
+                    }
                 } else if (scoreSubmitted) {
                     ctx.fillStyle = "#27AE60"; ctx.font = "bold 16px 'Courier New'";
                     let savedMsg = savedAsName ? "SAVED: " + savedAsName : "SCORE SAVED!";
