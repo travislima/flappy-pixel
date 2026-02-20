@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "scores": {
+      ".read": true,
+      ".indexOn": ["score"],
+      "$scoreId": {
+        ".write": "!data.exists()",
+        ".validate": "newData.hasChildren(['name', 'score', 'date']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 10 && newData.child('score').isNumber() && newData.child('score').val() >= 1 && newData.child('score').val() <= 9999 && newData.child('date').isNumber() && newData.child('date').val() <= now"
+      }
+    },
+    ".read": false,
+    ".write": false
+  }
+}
