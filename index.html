@@ -475,7 +475,7 @@
                     ctx.fillText(rank, 30, rowY);
                     ctx.fillStyle = "white";
                     let flag = countryToFlag(entry.country);
-                    let nameDisplay = flag ? flag + " " + entry.name : entry.name;
+                    let nameDisplay = flag ? entry.name + " " + flag : entry.name;
                     ctx.strokeText(nameDisplay, 80, rowY);
                     ctx.fillText(nameDisplay, 80, rowY);
                     ctx.textAlign = "right";
