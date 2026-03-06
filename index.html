@@ -38,6 +38,7 @@
     <meta name="apple-mobile-web-app-title" content="Flappy Pixel">
 
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='4' y='2' width='8' height='8' rx='2' fill='%23F1C40F'/><rect x='9' y='3' width='3' height='3' rx='1' fill='white'/><rect x='10' y='4' width='1' height='1' fill='black'/><rect x='4' y='7' width='5' height='2' fill='%23E67E22'/></svg>">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.json">
 
     <!-- Structured Data -->
@@ -748,6 +749,11 @@
         }
 
         gameLoop();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
     </script>
 </body>
 </html>
